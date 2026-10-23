@@ -20,6 +20,7 @@ const $ = (sel, el = document) => el.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const icon = (rel) => (rel && ICONS ? `${ICONS}${rel}` : "");
 const fmt = (n) => (typeof n === "number" ? n.toLocaleString("ko-KR") : n);
+document.addEventListener("error", (e) => { if (e.target.tagName === "IMG") e.target.style.visibility = "hidden"; }, true);
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 
 function status(msg, err = false) {
