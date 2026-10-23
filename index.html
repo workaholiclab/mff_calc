@@ -9,13 +9,16 @@
 <body>
 <header class="top">
   <div class="brand">MFF DAMAGE <span class="ver">v12.3.1</span></div>
-  <label class="field">콘텐츠
-    <select id="mode"></select>
-  </label>
+  <label class="field">콘텐츠 <select id="mode"></select></label>
+  <label class="field">팀 인원 <input type="number" id="team_size" min="1" max="5" step="1"></label>
   <label class="check"><input type="checkbox" id="team_fx" checked> 모든 영웅 효과 받기</label>
+  <label class="field" title="타임라인 등 PvP 피해 계수">PvP 일반 <input type="number" id="pvp" step="0.01" min="0"></label>
+  <label class="field">천성 <input type="number" id="pvp_sp" step="0.01" min="0"></label>
   <div class="spacer"></div>
   <label class="btn" title="exe·웹에서 저장한 스펙 JSON 불러오기">불러오기<input type="file" id="file" accept=".json,application/json" hidden></label>
   <button class="btn" id="save" title="현재 스펙을 JSON 으로 저장">저장</button>
+  <button class="btn" id="copy-ae" title="아군의 모든 정보를 적군에 복사">아군→적군</button>
+  <button class="btn" id="copy-ea" title="적군의 모든 정보를 아군에 복사">적군→아군</button>
   <button class="btn" id="swap" title="아군과 적군 교체">⇄ 교체</button>
   <button class="btn primary" id="calc">계산</button>
 </header>
@@ -32,38 +35,16 @@
   <section class="side enemy" id="side-enemy"></section>
 </main>
 
-<template id="side-tpl">
-  <div class="hero-head">
-    <img class="portrait" alt="">
-    <div class="hero-fields">
-      <div class="title-row"><b class="side-title"></b> <span class="tier"></span></div>
-      <input class="hero" list="hero-list" placeholder="영웅 검색 (이름 입력)">
-      <select class="variant"></select>
-      <div class="row">
-        <select class="skill"></select>
-        <select class="skill-level"></select>
-      </div>
-      <div class="row small">
-        <label>레벨 <input type="number" class="level" min="1" max="90" step="1"></label>
-        <label>잠재력 <input type="number" class="potential" min="0" max="12" step="1"></label>
-      </div>
-      <div class="gear small"><img class="ctp-icon" alt=""><span class="ctp"></span> · <span class="artifact"></span></div>
-      <div class="team small"></div>
-    </div>
+<div id="uru-pop" class="pop" hidden>
+  <div class="pop-box">
+    <div class="pop-head"><b>강화 우루 선택</b> <span id="uru-where" class="small"></span>
+      <button class="btn" id="uru-close">닫기</button></div>
+    <div class="pop-tools"><label class="check"><input type="checkbox" id="uru-amp" checked> 증폭 (괄호 수치 합산)</label>
+      <input type="text" id="uru-q" placeholder="검색 (예: 치명타, 물리)"><button class="btn" id="uru-clear">비우기</button></div>
+    <div id="uru-list" class="uru-list"></div>
   </div>
-  <div class="tabs">
-    <button data-tab="info" class="on">정보</button>
-    <button data-tab="stat">스탯</button>
-    <button data-tab="effects">전투 효과</button>
-    <button data-tab="breakdown">분해표</button>
-  </div>
-  <div class="tab info on"></div>
-  <div class="tab stat"></div>
-  <div class="tab effects"></div>
-  <div class="tab breakdown"></div>
-</template>
+</div>
 
-<datalist id="hero-list"></datalist>
 <footer class="foot">입력 스펙(JSON)은 이 기기에서만 저장·불러오며, 계산할 때만 서버로 보내고 보관하지 않습니다.</footer>
 <script src="config.js"></script>
 <script src="app.js"></script>

@@ -1,30 +1,26 @@
-// MFF 데미지 계산기 — 웹 화면 (계산은 서버에서, 여기에는 입력·표시만)
+// MFF 데미지 계산기 — 웹 화면
+// 계산은 서버에서 하고, 서버가 보내 주는 exe 화면 구성(탭·항목·입력 칸)을 그대로 그린다.
 "use strict";
 const API = window.MFF_API.replace(/\/$/, "");
 const ICONS = window.MFF_ICONS || "";
 const SIDES = ["ally", "enemy"];
 const SIDE_NAME = { ally: "아군", enemy: "적군" };
 const STORE_KEY = "mff_spec_v1";
-// 정보 탭 배치 (게임 '영웅 상세 정보' 화면 순서)
-const INFO_LAYOUT = [
-  [["공격", ["attack", "attack_alt", "atk_speed", "crit", "crit_dmg", "penetrate", "dodge_ignore", "dmg_fire", "dmg_cold",
-            "dmg_elec", "dmg_poison", "dmg_mind", "add_penetrate", "focus", "element_add"]],
-   ["천성", ["sp_atk", "sp_def", "sp_crit", "sp_crit_dmg", "sp_accuracy", "sp_dodge", "sp_guard", "sp_reduce"]]],
-  [["방어", ["def_phys", "def_en", "hp", "recovery", "dodge", "res_fire", "res_cold", "res_elec", "res_poison", "res_mind",
-            "penetrate_reduce", "dmg_reduce_phys", "dmg_reduce_en"]],
-   ["상태 이상", ["move_speed", "cc_reduce", "cooldown"]]],
-];
 
-let spec = null;        // exe 저장 형식과 같은 스펙 JSON
-let last = null;        // 마지막 계산 결과
+let spec = null;          // exe 저장 형식과 같은 스펙 JSON
+let last = null;          // 마지막 계산 결과
 let meta = null;
-let pending = [];       // 다음 계산 때 서버에 보낼 화면 조작 (영웅 교체 등)
+let pending = [];         // 다음 계산 때 서버에 보낼 화면 조작
 let timer = null, busy = false, again = false;
+const curTab = { ally: "정보", enemy: "정보" };
+const subTab = {};        // 탭 안의 탭 (있을 때)
+let uruTarget = null;
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const icon = (rel) => (rel && ICONS ? `${ICONS}${rel}` : "");
 const fmt = (n) => (typeof n === "number" ? n.toLocaleString("ko-KR") : n);
+const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 
 function status(msg, err = false) {
   const el = $("#status");
@@ -46,6 +42,7 @@ function recalc(delay = 250) {
   clearTimeout(timer);
   timer = setTimeout(run, delay);
 }
+function act(side, a, delay = 0) { pending.push({ side, ...a }); recalc(delay); }
 
 async function run() {
   if (busy) { again = true; return; }
@@ -72,12 +69,17 @@ async function run() {
   }
 }
 
-// ── 화면 그리기 ──
+// ── 화면 ──
 function render() {
+  const y = window.scrollY;
   $("#mode").value = last.mode;
   $("#team_fx").checked = spec.team_fx !== false;
+  $("#team_size").value = spec.team_size ?? 3;
+  $("#pvp").value = spec.pvp ?? 1;
+  $("#pvp_sp").value = spec.pvp_sp ?? 1;
   renderResults();
   for (const s of SIDES) renderSide(s);
+  window.scrollTo(0, y);
 }
 
 function renderResults() {
@@ -98,105 +100,202 @@ function renderResults() {
   }).join("");
 }
 
-function sideEl(s) { return $(`#side-${s}`); }
-
-function buildSide(s) {
-  const el = sideEl(s);
-  el.appendChild($("#side-tpl").content.cloneNode(true));
-  $(".side-title", el).textContent = SIDE_NAME[s];
-  el.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
-    el.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-    el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.classList.contains(b.dataset.tab)));
-  }));
-  const hero = $(".hero", el);
-  hero.addEventListener("change", () => {
-    const h = meta.heroes.find((x) => x.name === hero.value.trim());
-    if (!h) { status("목록에 있는 영웅 이름을 고르세요.", true); return; }
-    pending.push({ side: s, hero: h.id });
-    recalc(0);
-  });
-  $(".variant", el).addEventListener("change", (e) => { pending.push({ side: s, variant: Number(e.target.value) }); recalc(0); });
-  $(".skill", el).addEventListener("change", (e) => { spec[s].skill = Number(e.target.value); recalc(); });
-  $(".skill-level", el).addEventListener("change", (e) => { spec[s].skill_level = Number(e.target.value); recalc(); });
-  $(".level", el).addEventListener("change", (e) => { spec[s].level = Number(e.target.value); recalc(); });
-  $(".potential", el).addEventListener("change", (e) => { spec[s].potential = Number(e.target.value); recalc(); });
-}
-
 function renderSide(s) {
-  const el = sideEl(s), d = last[s], ui = d.ui;
-  const img = $(".portrait", el);
-  img.src = icon(ui.portrait); img.style.visibility = ui.portrait && ICONS ? "visible" : "hidden";
-  $(".tier", el).textContent = ui.tier ? `티어-${ui.tier}` : "";
-  if (document.activeElement !== $(".hero", el)) $(".hero", el).value = d.hero;
-  $(".variant", el).innerHTML = ui.variants.map(([id, t]) => `<option value="${id}" ${id === ui.variant_id ? "selected" : ""}>${esc(t)}</option>`).join("");
-  $(".skill", el).innerHTML = ui.skills.map((t, i) => `<option value="${i}" ${i === ui.skill ? "selected" : ""}>${esc(t)}</option>`).join("");
-  $(".skill-level", el).innerHTML = ui.skill_levels.map((t, i) => `<option value="${i}" ${i === ui.skill_level ? "selected" : ""}>${esc(t)}</option>`).join("");
-  Object.assign($(".level", el), { value: ui.level, max: ui.level_max });
-  $(".potential", el).value = ui.potential;
-  const ci = $(".ctp-icon", el);
-  ci.src = icon(ui.ctp_icon); ci.style.display = ui.ctp_icon && ICONS ? "" : "none";
-  $(".ctp", el).textContent = ui.ctp || "C.T.P. 없음";
-  $(".artifact", el).textContent = ui.artifact || "아티팩트 없음";
-  $(".team", el).textContent = "팀원: " + (ui.team.map((t) => t[1]).filter(Boolean).join(", ") || "없음");
-  renderInfo(s); renderStat(s); renderEffects(s); renderBreakdown(s);
+  const el = $(`#side-${s}`), d = last[s], ui = d.ui;
+  el.innerHTML = "";
+  const head = h("div", "hero-head");
+  const img = h("img", "portrait");
+  if (ui.portrait && ICONS) img.src = icon(ui.portrait); else img.style.visibility = "hidden";
+  head.appendChild(img);
+  head.appendChild(h("div", "hero-sum", `<div><b class="side-title">${SIDE_NAME[s]}</b> <span class="tier">${ui.tier ? `티어-${ui.tier}` : ""}</span></div>
+    <div class="hname">${esc(d.hero)}</div><div class="small">${esc(d.variant)}</div>
+    <div class="small">${ui.ctp_icon && ICONS ? `<img class="mini" src="${icon(ui.ctp_icon)}">` : ""}${esc(ui.ctp || "C.T.P. 없음")} · ${esc(ui.artifact || "아티팩트 없음")}</div>`));
+  el.appendChild(head);
+  el.appendChild(node(d.tree, s, "root"));
 }
 
-function renderInfo(s) {
-  const d = last[s];
-  const kv = (k) => {
-    const v = d.info[k];
-    if (v === undefined) return "";
-    const cap = /초과분/.test(v) || /^200\.00%|^75\.00%|^50\.00%|^130\.00%/.test(v);
-    return `<div class="kv"><span class="k">${esc(d.info_names[k])}</span><span class="v ${cap ? "cap" : ""}">${esc(v)}</span></div>`;
-  };
-  $(".tab.info", sideEl(s)).innerHTML = `<div class="grid2">${INFO_LAYOUT.map((col) =>
-    `<div>${col.map(([t, keys]) => `<div class="blk"><h4>${t}</h4>${keys.map(kv).join("")}</div>`).join("")}</div>`).join("")}</div>`;
+// ── 서버가 보낸 화면 트리 그리기 ──
+function node(n, s, path) {
+  if (!n) return document.createTextNode("");
+  switch (n.t) {
+    case "col": { const e = h("div", "v"); n.kids.forEach((k, i) => e.appendChild(node(k, s, `${path}.${i}`))); return e; }
+    case "row": { const e = h("div", "hz"); n.kids.forEach((k, i) => e.appendChild(node(k, s, `${path}.${i}`))); return e; }
+    case "grid": {
+      const wrap = h("div", "gwrap");
+      const e = h("div", "grid");
+      e.style.gridTemplateColumns = `repeat(${Math.max(1, n.cols)}, auto)`;
+      n.cells.forEach((c, i) => {
+        const x = node(c.n, s, `${path}.${i}`);
+        const cell = h("div", "cell");
+        cell.style.gridRow = `${c.r + 1} / span ${c.rs > 0 ? c.rs : 1}`;
+        cell.style.gridColumn = `${c.c + 1} / span ${c.cs > 0 ? c.cs : 1}`;
+        cell.appendChild(x);
+        e.appendChild(cell);
+      });
+      wrap.appendChild(e);
+      return wrap;
+    }
+    case "form": {
+      const e = h("div", "form");
+      n.rows.forEach(([lab, f], i) => {
+        const r = h("div", "frow");
+        if (lab !== null) r.appendChild(h("span", "flab", esc(lab)));
+        r.appendChild(node(f, s, `${path}.${i}`));
+        e.appendChild(r);
+      });
+      return e;
+    }
+    case "group": {
+      const e = h("fieldset", "grp");
+      e.appendChild(h("legend", "", esc(n.title)));
+      e.appendChild(node(n.node, s, path));
+      return e;
+    }
+    case "tabs": return tabs(n, s, path);
+    case "label": { const e = h("span", n.hint ? "lbl hint" : "lbl", esc(n.text).replace(/\n/g, "<br>")); return e; }
+    case "num": return num(n, s);
+    case "combo": return combo(n, s);
+    case "check": return check(n, s);
+    case "btn": { const b = h("button", "btn sm", esc(n.text)); b.disabled = !n.en; b.onclick = () => act(s, { w: n.id }); return b; }
+    case "text": { const i = h("input"); i.type = "text"; i.value = n.v; i.readOnly = n.ro; i.onchange = () => act(s, { w: n.id, v: i.value }); return i; }
+    case "tree": return tree(n, s);
+    case "list": return list(n, s);
+    case "uru": return uru(n, s);
+    default: return document.createTextNode("");
+  }
 }
 
-function renderStat(s) {
-  const d = last[s];
-  const rows = d.battle_totals.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td class="num">${esc(r[2])}</td>
-    <td class="num">${esc(r[3])}</td><td class="num">${esc(r[4])}</td><td class="num">${esc(r[5])}</td><td class="num">${esc(r[6])}</td>
-    <td class="num fin">${esc(r[7])}</td></tr>`).join("");
-  $(".tab.stat", sideEl(s)).innerHTML = `<div class="scroll"><table>
-    <tr><th>묶음</th><th>항목</th><th>기준</th><th>상대 특성</th><th>정적</th><th>동적</th><th>디버프</th><th>최종</th></tr>${rows}</table></div>`;
+function tabs(n, s, path) {
+  const root = n.tabs.some((t) => t.title === "정보");         // 패널의 큰 탭 (정보·영웅·스킬·…)
+  const key = root ? null : `${s}:${path}`;
+  const cur = root ? curTab[s] : (subTab[key] || n.tabs[0].title);
+  const e = h("div", "tabsw");
+  const bar = h("div", "tabs");
+  n.tabs.forEach((t) => {
+    const b = h("button", t.title === cur ? "on" : "", esc(t.title));
+    b.onclick = () => { if (root) curTab[s] = t.title; else subTab[key] = t.title; renderSide(s); };
+    bar.appendChild(b);
+  });
+  e.appendChild(bar);
+  const page = n.tabs.find((t) => t.title === cur) || n.tabs[0];
+  const pg = h("div", "tabpage");
+  pg.appendChild(node(page.node, s, `${path}/${page.title}`));
+  e.appendChild(pg);
+  return e;
 }
 
-function renderEffects(s) {
-  const el = $(".tab.effects", sideEl(s));
-  const q = (el.dataset.q || "").toLowerCase();
-  const list = last[s].effects.filter((e) => !q || (e.name + e.source + e.trigger).toLowerCase().includes(q));
-  el.innerHTML = `<div class="filter"><input type="text" placeholder="효과 검색" value="${esc(el.dataset.q || "")}"></div>
-    <div class="scroll">${list.map((e, i) => {
-      const dyn = e.class.startsWith("동적");
-      const ic = icon(e.icon);
-      return `<div class="eff ${e.checked ? "" : "off"} ${e.enabled ? "" : "dis"}">
-        <input type="checkbox" data-i="${last[s].effects.indexOf(e)}" ${e.checked ? "checked" : ""} ${e.enabled ? "" : "disabled"}>
-        ${ic ? `<img src="${ic}" alt="" loading="lazy">` : "<span></span>"}
-        <div><div class="nm">${esc(e.name)}</div><div class="src">${esc(e.source)}</div>
-          <div class="val">${esc(e.value)}</div><div class="tr">${esc(e.trigger)} · <span class="cls ${dyn ? "dyn" : "st"}">${esc(e.class)}</span></div></div>
-      </div>`;
-    }).join("")}</div>`;
-  const inp = $(".filter input", el);
-  inp.addEventListener("input", () => { el.dataset.q = inp.value; renderEffects(s); const n = $(".filter input", el); n.focus(); n.setSelectionRange(n.value.length, n.value.length); });
-  el.querySelectorAll("input[type=checkbox]").forEach((cb) => cb.addEventListener("change", () => toggleEffect(s, Number(cb.dataset.i), cb.checked)));
+function num(n, s) {
+  const w = h("span", "num");
+  if (n.pre) w.appendChild(h("span", "affix", esc(n.pre)));
+  if (n.ro) {
+    w.appendChild(h("b", "ro", Number(n.v).toLocaleString("ko-KR", { minimumFractionDigits: n.dec, maximumFractionDigits: n.dec })));
+  } else {
+    const i = h("input");
+    Object.assign(i, { type: "number", value: n.v, min: n.min, max: n.max, step: n.step || (n.dec ? 10 ** -n.dec : 1), disabled: !n.en });
+    i.style.width = `${Math.min(14, Math.max(7, String(Math.round(n.max)).length + (n.dec ? n.dec + 1 : 0) + 4))}ch`;
+    i.onchange = () => act(s, { w: n.id, v: i.value }, 300);
+    w.appendChild(i);
+  }
+  if (n.suf) w.appendChild(h("span", "affix", esc(n.suf)));
+  return w;
 }
 
-function toggleEffect(s, i, on) {
-  const e = last[s].effects[i];
-  const key = JSON.stringify(e.key);
-  const list = spec[s].effects_keyed || (spec[s].effects_keyed = []);
-  const row = list.find((r) => JSON.stringify([r[0], r[1], r[2].map((x) => Math.round(x * 1e6) / 1e6)]) === key);
-  if (row) { row[3] = on; row[4] = e.trigger; } else list.push([e.key[0], e.key[1], e.key[2], on, e.trigger]);
-  e.checked = on;
-  recalc();
+function combo(n, s) {
+  const sel = h("select");
+  sel.innerHTML = n.items.map((t, i) => `<option value="${i}" ${i === n.cur ? "selected" : ""}>${esc(t)}</option>`).join("");
+  sel.disabled = !n.en;
+  sel.onchange = () => act(s, { w: n.id, v: Number(sel.value) });
+  if (!n.search || n.items.length < 30) return sel;
+  // 항목이 많은 검색형 콤보(영웅·C.T.P. 등): 이름 입력 검색 + 목록
+  const w = h("span", "csearch");
+  const dl = h("datalist"); dl.id = `dl-${s}-${n.id}`;
+  dl.innerHTML = n.items.map((t) => `<option value="${esc(t)}"></option>`).join("");
+  const q = h("input"); q.type = "search"; q.placeholder = "이름 검색"; q.setAttribute("list", dl.id);
+  q.onchange = () => { const k = n.items.indexOf(q.value.trim()); if (k >= 0) act(s, { w: n.id, v: k }); };
+  w.append(sel, q, dl);
+  return w;
 }
 
-function renderBreakdown(s) {
-  const b = last[s].breakdown;
-  const head = ["출처", "공격 %", "고정", "물방 %", "고정", "에방 %", "고정", "생명 %", "고정"];
-  $(".tab.breakdown", sideEl(s)).innerHTML = `<div class="scroll"><table><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr>
-    ${b.map((r) => `<tr>${r.map((c, j) => `<td class="${j ? "num" : ""} ${/최종/.test(r[0]) ? "fin" : ""}">${esc(c)}</td>`).join("")}</tr>`).join("")}</table></div>`;
+function check(n, s) {
+  const l = h("label", n.button ? "check tog" : "check");
+  const i = h("input"); i.type = n.radio ? "radio" : "checkbox"; i.checked = n.v; i.disabled = !n.en;
+  i.onchange = () => act(s, { w: n.id, v: i.checked });
+  l.append(i, document.createTextNode(` ${n.text}`));
+  return l;
+}
+
+function tree(n, s) {
+  const wrap = h("div", "scroll");
+  const t = h("table");
+  if (n.head.length) t.appendChild(h("tr", "", n.head.map((x) => `<th>${esc(x)}</th>`).join("")));
+  n.rows.forEach((r, i) => {
+    const tr = h("tr", r.en ? "" : "dis");
+    r.cells.forEach((c, j) => {
+      const td = h("td", j ? "num" : "");
+      if (j === 0) {
+        td.style.paddingLeft = `${4 + r.d * 14}px`;
+        if (r.c !== null) {
+          const cb = h("input"); cb.type = "checkbox"; cb.checked = r.c; cb.disabled = !r.en;
+          cb.onchange = () => act(s, { w: n.id, row: i, v: cb.checked });
+          td.appendChild(cb);
+        }
+        td.appendChild(document.createTextNode(` ${c}`));
+      } else td.textContent = c;
+      if (/최종/.test(r.cells[0])) td.classList.add("fin");
+      tr.appendChild(td);
+    });
+    t.appendChild(tr);
+  });
+  wrap.appendChild(t);
+  return wrap;
+}
+
+function list(n, s) {
+  const w = h("div", "scroll clist");
+  n.items.forEach((it, i) => {
+    const l = h("label", "check");
+    if (it.c !== null) {
+      const cb = h("input"); cb.type = "checkbox"; cb.checked = it.c;
+      cb.onchange = () => act(s, { w: n.id, row: i, v: cb.checked });
+      l.appendChild(cb);
+    }
+    l.appendChild(document.createTextNode(` ${it.text}`));
+    w.appendChild(l);
+  });
+  return w;
+}
+
+function uru(n, s) {
+  const u = meta.uru.find((x) => x[0] === n.cur);
+  const b = h("button", `uru ${u && n.amp ? "amp" : ""}`);
+  b.disabled = !n.en;
+  b.title = n.en ? (u ? `${u[1]}${n.amp ? " (증폭)" : ""}` : "비어 있음 — 눌러서 선택") : "장비 랭크 미달로 잠김";
+  if (!n.en) b.textContent = "🔒";
+  else if (u && u[2] && ICONS) b.innerHTML = `<img src="${icon(u[2])}" alt="">`;
+  else b.textContent = u ? "U" : "+";
+  b.onclick = () => openUru(s, n, u);
+  return b;
+}
+
+function openUru(s, n, u) {
+  uruTarget = { s, id: n.id };
+  $("#uru-where").textContent = `${SIDE_NAME[s]} · 장비 ${n.slot[0]} · 슬롯 ${n.slot[1] + 1}${u ? ` — 현재: ${u[1]}` : ""}`;
+  $("#uru-amp").checked = n.cur ? n.amp : true;
+  $("#uru-q").value = "";
+  fillUru();
+  $("#uru-pop").hidden = false;
+}
+
+function fillUru() {
+  const q = $("#uru-q").value.trim();
+  $("#uru-list").innerHTML = meta.uru.filter((u) => !q || u[1].includes(q)).map((u) =>
+    `<button class="uitem" data-id="${u[0]}">${u[2] && ICONS ? `<img src="${icon(u[2])}" loading="lazy">` : ""}<span>${esc(u[1])}</span></button>`).join("");
+}
+
+function pickUru(id) {
+  if (!uruTarget) return;
+  act(uruTarget.s, { w: uruTarget.id, uru: id, amp: $("#uru-amp").checked });
+  $("#uru-pop").hidden = true;
 }
 
 // ── 파일 ──
@@ -226,19 +325,25 @@ function upload(file) {
 
 // ── 시작 ──
 async function init() {
-  for (const s of SIDES) buildSide(s);
   document.querySelectorAll(".side-switch button").forEach((b) => b.addEventListener("click", () => {
     document.querySelectorAll(".side-switch button").forEach((x) => x.classList.toggle("on", x === b));
-    for (const s of SIDES) sideEl(s).classList.toggle("show", s === b.dataset.side);
+    for (const s of SIDES) $(`#side-${s}`).classList.toggle("show", s === b.dataset.side);
   }));
-  sideEl("ally").classList.add("show");
+  $("#side-ally").classList.add("show");
   $("#calc").addEventListener("click", () => recalc(0));
   $("#save").addEventListener("click", download);
   $("#file").addEventListener("change", (e) => { if (e.target.files[0]) upload(e.target.files[0]); e.target.value = ""; });
   $("#swap").addEventListener("click", () => { [spec.ally, spec.enemy] = [spec.enemy, spec.ally]; recalc(0); });
+  $("#copy-ae").addEventListener("click", () => { spec.enemy = JSON.parse(JSON.stringify(spec.ally)); recalc(0); });
+  $("#copy-ea").addEventListener("click", () => { spec.ally = JSON.parse(JSON.stringify(spec.enemy)); recalc(0); });
   $("#mode").addEventListener("change", (e) => { spec.mode = e.target.value; recalc(0); });
   $("#team_fx").addEventListener("change", (e) => { spec.team_fx = e.target.checked; recalc(0); });
-  status("계산 서버 연결 중… (처음에는 서버가 깨어나는 데 시간이 걸릴 수 있습니다)");
+  for (const k of ["team_size", "pvp", "pvp_sp"]) $(`#${k}`).addEventListener("change", (e) => { spec[k] = Number(e.target.value); recalc(); });
+  $("#uru-close").onclick = () => { $("#uru-pop").hidden = true; };
+  $("#uru-clear").onclick = () => pickUru(0);
+  $("#uru-q").oninput = fillUru;
+  $("#uru-list").addEventListener("click", (e) => { const b = e.target.closest(".uitem"); if (b) pickUru(Number(b.dataset.id)); });
+  status("계산 서버 연결 중… (처음에는 서버가 깨어나는 데 10초 정도 걸릴 수 있습니다)");
   try {
     meta = await api("/api/meta");
   } catch (e) {
@@ -246,7 +351,6 @@ async function init() {
     return;
   }
   $("#mode").innerHTML = meta.contents.map((c) => `<option>${esc(c)}</option>`).join("");
-  $("#hero-list").innerHTML = meta.heroes.map((h) => `<option value="${esc(h.name)}"></option>`).join("");
   try { spec = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (_) { spec = null; }
   if (!spec || !spec.ally || !spec.enemy) spec = { mode: meta.contents[0], team_fx: true, ally: {}, enemy: {} };
   recalc(0);
