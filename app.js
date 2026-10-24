@@ -241,6 +241,16 @@ function tree(n, s) {
           td.appendChild(cb);
         }
         td.appendChild(document.createTextNode(` ${c}`));
+      } else if (r.cc && r.cc[j] !== undefined) {
+        const cb = h("input"); cb.type = "checkbox"; cb.checked = r.cc[j]; cb.disabled = !r.en;
+        cb.onchange = () => act(s, { w: n.id, row: i, col: j, v: cb.checked });
+        td.appendChild(cb);
+        td.appendChild(document.createTextNode(` ${c}`));
+      } else if (r.ed && r.ed.includes(j)) {
+        const inp = h("input"); inp.type = "number"; inp.step = "0.01"; inp.className = "cell-edit";
+        inp.value = c ? String(c).replace(/,/g, "") : "";
+        inp.onchange = () => act(s, { w: n.id, row: i, col: j, v: inp.value || "0", edit: true });
+        td.appendChild(inp);
       } else td.textContent = c;
       if (/최종/.test(r.cells[0])) td.classList.add("fin");
       tr.appendChild(td);

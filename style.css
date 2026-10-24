@@ -117,3 +117,4 @@ tr.dis td { opacity: .45; }
 .uitem:hover { border-color: var(--gold); }
 .uitem img { width: 26px; height: 26px; }
 .top input[type=number] { width: 5.5em; }
+input.cell-edit { width: 5.5em; text-align: right; }
