@@ -160,6 +160,7 @@ function node(n, s, path) {
     case "btn": { const b = h("button", "btn sm", esc(n.text)); b.disabled = !n.en; b.onclick = () => act(s, { w: n.id }); return b; }
     case "text": { const i = h("input"); i.type = "text"; i.value = n.v; i.readOnly = n.ro; i.onchange = () => act(s, { w: n.id, v: i.value }); return i; }
     case "tree": return tree(n, s);
+    case "graph": return graph(n);
     case "list": return list(n, s);
     case "uru": return uru(n, s);
     default: return document.createTextNode("");
@@ -258,6 +259,57 @@ function tree(n, s) {
     t.appendChild(tr);
   });
   wrap.appendChild(t);
+  return wrap;
+}
+
+// 스킬 타격 프레임 그래프 (막대 = 1타 피해, 선 = 누적)
+function graph(n) {
+  const wrap = h("div", "graph");
+  const W = 760, H = 240, L = 52, R = 56, T = 24, B = 34;
+  const pw = W - L - R, ph = H - T - B;
+  const fmt = (v) => (v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e4 ? Math.round(v / 1e3) + "K" : Math.round(v).toLocaleString());
+  if (!n.frames || !n.bars.length) {
+    wrap.textContent = n.note || "타격 타임라인 데이터가 없습니다.";
+    wrap.classList.add("hint");
+    return wrap;
+  }
+  const top = Math.max(...n.bars.map(([, l]) => l.reduce((a, x) => a + x[1], 0))) || 1;
+  const X = (f) => L + (pw * f) / n.frames;
+  const Yb = (v) => T + ph - (ph * v) / top;
+  const Yc = (v) => T + ph - (ph * v) / (n.total || 1);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">`;
+  svg += `<rect x="0" y="0" width="${W}" height="${H}" fill="#0f1524"/>`;
+  for (let k = 1; k <= 4; k++) {
+    const y = T + ph - (ph * k) / 4;
+    svg += `<line x1="${L}" x2="${L + pw}" y1="${y}" y2="${y}" stroke="#26304a"/>`;
+    svg += `<text x="${L - 6}" y="${y + 4}" fill="#8fa3c8" font-size="11" text-anchor="end">${fmt((top * k) / 4)}</text>`;
+    svg += `<text x="${L + pw + 6}" y="${y + 4}" fill="${n.cum}" font-size="11">${fmt((n.total * k) / 4)}</text>`;
+  }
+  const step = [1, 2, 5, 10, 20, 50, 100, 200].find((s_) => n.frames / s_ <= 9) || 500;
+  for (let f = 0; f <= n.frames; f += step) {
+    svg += `<text x="${X(f)}" y="${T + ph + 14}" fill="#8fa3c8" font-size="11" text-anchor="middle">${f}</text>`;
+    svg += `<text x="${X(f)}" y="${T + ph + 27}" fill="#8fa3c8" font-size="10" text-anchor="middle">${(f / 30).toFixed(1)}s</text>`;
+  }
+  const bw = Math.max(2, Math.min(14, (pw / n.frames) * 0.8));
+  let acc = 0, path = `M${X(0)},${Yc(0)}`;
+  n.bars.forEach(([f, lst]) => {
+    let base = 0;
+    lst.forEach(([seg, d, no, sel]) => {
+      const col = sel ? n.gold : n.colors[seg % n.colors.length];
+      svg += `<rect x="${X(f) - bw / 2}" y="${Yb(base + d)}" width="${bw}" height="${Yb(base) - Yb(base + d)}" fill="${col}"><title>${f}프레임 (${(f / 30).toFixed(2)}초) · ${no}타 ${d.toLocaleString()}</title></rect>`;
+      base += d;
+    });
+    path += ` L${X(f)},${Yc(acc)}`;
+    acc += base;
+    path += ` L${X(f)},${Yc(acc)}`;
+  });
+  path += ` L${X(n.frames)},${Yc(acc)}`;
+  svg += `<path d="${path}" fill="none" stroke="${n.cum}" stroke-width="2"/>`;
+  let head = `타격 피해 합계 ${n.total.toLocaleString()} · 전체 ${n.frames}프레임 (${(n.frames / 30).toFixed(2)}초, 공격 속도 100%)`;
+  if (n.projHits) head += ` | 투사체 최대 ${n.projHits}타 ${n.proj.toLocaleString()} (그래프 밖)`;
+  svg += `<text x="${L}" y="15" fill="#e6e9f0" font-size="12">${esc(head)}</text>`;
+  svg += `<text x="${L + pw + R - 4}" y="15" fill="${n.cum}" font-size="12" text-anchor="end">— 누적</text></svg>`;
+  wrap.innerHTML = svg;
   return wrap;
 }
 

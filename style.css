@@ -118,3 +118,5 @@ tr.dis td { opacity: .45; }
 .uitem img { width: 26px; height: 26px; }
 .top input[type=number] { width: 5.5em; }
 input.cell-edit { width: 5.5em; text-align: right; }
+.graph { margin: 6px 0; }
+.graph svg { display: block; max-width: 100%; border-radius: 6px; }
