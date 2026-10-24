@@ -97,8 +97,45 @@ function renderResults() {
       <div class="total">${fmt(r.total)}</div>
       <div class="bar"><i class="n" style="width:${pct(r.normal)}"></i><i class="p" style="width:${pct(r.penetrate)}"></i><i class="s" style="width:${pct(r.special)}"></i></div>
       <div class="d">일반 피해 ${fmt(r.normal + r.penetrate)} (${esc(r.kind)} ${fmt(r.normal)} + 추가 관통 ${fmt(r.penetrate)}) · 천성 피해 ${fmt(r.special)}</div>
-      ${sk}<div class="d">${extra}</div></div>`;
+      ${r.sim ? `<div class="d"><b>${esc(r.sim)}</b></div>` : ""}
+      ${sk}<div class="d">${extra}</div>
+      ${r.sim_graph ? simSvg(r.sim_graph) : ""}</div>`;
   }).join("");
+}
+
+// 시뮬레이션 그래프: 시간 → 대상 생명력 (계단선) · 최대 생명력 (점선) · 발동 효과 띠 · 스킬 사용 눈금
+function simSvg(g) {
+  if (!g || !g.curve || !g.curve.length) return "";
+  const labels = [...new Set(g.spans.map((x) => x[0]))];
+  const W = 760, L = 62, R = 16, T = 34, BH = 12, B = 28 + BH * labels.length + 4, PH = 200, H = T + PH + B;
+  const pw = W - L - R, end = g.end || 1, top = Math.max(...g.curve.map((c) => c[2])) || 1;
+  const X = (t) => L + (pw * t) / end, Y = (v) => T + PH - (PH * v) / top;
+  const sh = (v) => (v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : v >= 1e4 ? Math.round(v / 1e3) + "K" : Math.round(v).toLocaleString());
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet"><rect width="${W}" height="${H}" fill="#0f1524"/>`;
+  for (let k = 0; k <= 4; k++) {
+    const y = T + PH - (PH * k) / 4;
+    s += `<line x1="${L}" x2="${L + pw}" y1="${y}" y2="${y}" stroke="#26304a"/><text x="${L - 6}" y="${y + 4}" fill="#8fa3c8" font-size="11" text-anchor="end">${sh((top * k) / 4)}</text>`;
+  }
+  const st = [0.5, 1, 2, 5, 10, 15, 20, 30, 60].find((x) => end / x <= 10) || 120;
+  for (let t = 0; t <= end + 1e-9; t += st)
+    s += `<line x1="${X(t)}" x2="${X(t)}" y1="${T}" y2="${T + PH}" stroke="#26304a"/><text x="${X(t)}" y="${T + PH + 13}" fill="#8fa3c8" font-size="11" text-anchor="middle">${+t.toFixed(1)}s</text>`;
+  let mx = "", hp = "", pm = null, ph = null;
+  g.curve.forEach(([t, h, m]) => {
+    mx += (pm === null ? `M${X(t)},${Y(m)}` : ` L${X(t)},${Y(pm)} L${X(t)},${Y(m)}`); pm = m;
+    hp += (ph === null ? `M${X(t)},${Y(h)}` : ` L${X(t)},${Y(ph)} L${X(t)},${Y(h)}`); ph = h;
+  });
+  mx += ` L${X(end)},${Y(pm)}`;
+  s += `<path d="${mx}" fill="none" stroke="${g.maxhp}" stroke-dasharray="5,4"/>`;
+  g.uses.forEach(([t, n]) => (s += `<line x1="${X(t)}" x2="${X(t)}" y1="${T - 6}" y2="${T}" stroke="#5a6a8c"><title>${t.toFixed(2)}초 ${esc(n)}</title></line>`));
+  s += `<path d="${hp}" fill="none" stroke="${g.hp}" stroke-width="2"/>`;
+  labels.forEach((l, i) => {
+    const c = g.colors[i % g.colors.length], y = T + PH + 20 + i * BH;
+    g.spans.filter((x) => x[0] === l).forEach(([, a, e]) => (s += `<rect x="${X(a)}" y="${y + 1}" width="${Math.max(2, X(Math.min(e, end)) - X(a))}" height="${BH - 3}" fill="${c}" opacity="0.7"><title>${esc(l)} ${a.toFixed(2)}~${e.toFixed(2)}초</title></rect>`));
+    s += `<text x="${L - 4}" y="${y + BH - 3}" fill="${c}" font-size="10" text-anchor="end">${esc(l.slice(0, 6))}</text>`;
+  });
+  if (g.kill != null) s += `<line x1="${X(g.kill)}" x2="${X(g.kill)}" y1="${T}" y2="${T + PH}" stroke="#f25c54" stroke-width="1.5"/>`;
+  s += `<text x="${L}" y="14" fill="#e6e9f0" font-size="12" font-weight="bold">${esc(g.title)}</text><text x="${L}" y="28" fill="#a9b6d3" font-size="11">${esc(g.summary || "")}</text></svg>`;
+  return `<div class="graph">${s}</div>`;
 }
 
 function renderSide(s) {
