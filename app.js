@@ -457,3 +457,23 @@ async function init() {
   recalc(0);
 }
 init();
+
+// 잘린 글씨: 마우스를 올리면 전체 텍스트 (title 이 없는 요소만)
+const _measure = document.createElement("canvas").getContext("2d");
+document.addEventListener("mouseover", (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLElement) || el.title || el.closest("svg")) return;
+  let t, cut;
+  if (el.tagName === "SELECT") {
+    t = el.options[el.selectedIndex]?.text || "";
+    _measure.font = getComputedStyle(el).font;
+    cut = _measure.measureText(t).width > el.clientWidth - 24;
+  } else if (el.tagName === "INPUT") {
+    t = el.value;
+    cut = el.scrollWidth > el.clientWidth + 1;
+  } else {
+    t = el.innerText;
+    cut = el.children.length === 0 && el.scrollWidth > el.clientWidth + 1;
+  }
+  if (t && cut) el.title = t;
+}, true);
