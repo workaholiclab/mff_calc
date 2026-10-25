@@ -245,6 +245,15 @@ function combo(n, s) {
   sel.innerHTML = n.items.map((t, i) => `<option value="${i}" ${i === n.cur ? "selected" : ""}>${esc(t)}</option>`).join("");
   sel.disabled = !n.en;
   sel.onchange = () => act(s, { w: n.id, v: Number(sel.value) });
+  if (n.icons && ICONS) {               // 항목 아이콘 (예: 보스 타입) — 선택된 항목 아이콘을 앞에 표시
+    const w = h("span", "cicon");
+    const img = h("img", "mini");
+    const upd = () => { const r = n.icons[Number(sel.value)]; img.src = r ? icon(r) : ""; img.style.visibility = r ? "visible" : "hidden"; };
+    sel.addEventListener("change", upd);
+    upd();
+    w.append(img, sel);
+    return w;
+  }
   if (!n.search || n.items.length < 30) return sel;
   // 항목이 많은 검색형 콤보(영웅·C.T.P. 등): 이름 입력 검색 + 목록
   const w = h("span", "csearch");

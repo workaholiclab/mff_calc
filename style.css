@@ -120,3 +120,4 @@ tr.dis td { opacity: .45; }
 input.cell-edit { width: 5.5em; text-align: right; }
 .graph { margin: 6px 0; }
 .graph svg { display: block; max-width: 100%; border-radius: 6px; }
+.cicon { display: inline-flex; align-items: center; gap: 4px; } .cicon .mini { width: 20px; height: 20px; margin: 0; }
